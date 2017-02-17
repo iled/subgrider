@@ -26,7 +26,7 @@ did_loadsims=.FALSE.
 do
 batch=-1
 print *,""
-print *,"----|| s u b g r i d e r  v0.2.4 <<jc 2010>> ||----"
+print *,"----|| s u b g r i d e r  v0.2.5 <<jc 2010>> ||----"
 print *,""
 print *,"escolher uma opcao"
 print *,""
@@ -84,6 +84,7 @@ elseif (op==0.2) then
     call abre(ficheiro,header,dg,nd,res,fid,timer)
     print *,"ficheiro carregado em ",tempo(timer)
     did_load=.TRUE.
+    close(9)
     call wait()
 elseif (op==0.3) then
     print *,"abrir varios ficheiros numerados de A a B"

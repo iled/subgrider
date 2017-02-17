@@ -134,17 +134,14 @@ type(grid),intent(in)::res
 real,intent(in)::q
 real,intent(out)::p
 real,intent(out)::timer
-type(grid)::aux,aux2
-real::i,start,finish,t
+real::start,finish,t
+integer::n,i
 call cpu_time(start)
-aux=res
-call QsortC(aux%val)
-call del_sorted_nd(aux%val,aux2%val,res%nd,t)
-deallocate(aux%val)
-do i=1,size(aux2%val)
-    if (aux2%val(i)>=q) exit
+n=0
+do i=1,size(res%val)
+    if (res%val(i)<=q) n=n+1
 end do
-p=i/size(aux2%val)
+p=n/real(size(res%val))
 call cpu_time(finish)
 timer=finish-start
 end subroutine percentil_updt
