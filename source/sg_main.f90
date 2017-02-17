@@ -1,23 +1,26 @@
 program subgrider
 
+use qsort_c_module
+
 ! declaracao de variaveis
-integer::i,op,nvar,fid,batch,nr_sims,zef
-integer,dimension(3)::dg,pa,pb,dg_2d
-character(len=256)::ficheiro,output,pocos,base,mp_bend
+integer::i,op,nvar,fid,batch,nr_sims
+integer,dimension(3)::dg,pa,pb
+character(len=256)::ficheiro,output,pocos,base
 character(len=1)::sgems,load,mp_p
 logical::file_exists,mp
 real,allocatable::sims(:,:)
 integer,allocatable::px(:),py(:)
-real::Q3,P1,timer,nd
+real::Q3,P1,timer,nd,p,q
 ! tipo de dados grid
 type::grid
     integer::dx,dy,dz
+    real::nd
     real,allocatable::val(:)
 end type grid
-type(grid)::res,hor
+type(grid)::res
 fid=10
 ! input inicial
-print *,"----|| s u b g r i d e r  v0.16_bender.2 ||----"
+print *,"----|| s u b g r i d e r  v0.18 ||----"
 print *,""
 print *,"carregar o ficheiro anterior? (s/n)"
 read *,load
@@ -26,7 +29,7 @@ if (load=="s" .or. load=="S") then
     if (file_exists) then
 	    open (9,file='subgrider.cfg',action='read')
 	    read (9,*) ficheiro,sgems,nvar
-	    read (9,*) dg
+	    read (9,*) dg,nd
     else
         print *,"ficheiro de configuracao nao encontrado."
         stop
@@ -46,16 +49,18 @@ elseif (load=="n" .or. load=="N") then
 	end if
 	print *,"dimensoes da grid: x y z"
 	read (*,*) dg
+	print *,"valor correspondente a no data"
+	read *,nd
 	open (9,file='subgrider.cfg',action='write')
 	write (9,*) ficheiro,sgems,nvar
-	write (9,*) dg
+	write (9,*) dg,nd
 	close (9)
 else
     print *,"erro - nao sei ler isso"
     stop
 end if
 print *,"a carregar o ficheiro ",trim(ficheiro),"..."
-call abre(ficheiro,nvar,dg,res,fid,timer)
+call abre(ficheiro,nvar,dg,nd,res,fid,timer)
 print *,"ficheiro carregado em ",tempo(timer)
 
 !ciclo principal
@@ -68,7 +73,8 @@ print *,"2 - obter n pocos verticais a partir do ficheiro pocos.dat"
 print *,"3 - obter uma grid a partir um volume (cubo, paralelipipedo) da grid inicial"
 print *,"4 - criar uma mascara (data=1, no data=0)"
 print *,"5 - calcular verosimilhanca"
-print *,"6 - bender"
+print *,"6 - calcular quartil"
+print *,"7 - corrigir quartil"
 print *,"0 - sair"
 read *,op
 if (op==1) then
@@ -79,10 +85,8 @@ if (op==1) then
     read *,sgems
     if (sgems=="s" .or. sgems=="S") then
         sgems="s"
-        nvar=1
     elseif (sgems=="n" .or. sgems=="N") then
         sgems="n"
-        nvar=0
     else
         print *,"erro - nao sei ler isso"
         stop
@@ -100,10 +104,8 @@ elseif (op==2) then
     read *,sgems
     if (sgems=="s" .or. sgems=="S") then
         sgems="s"
-        nvar=1
     elseif (sgems=="n" .or. sgems=="N") then
         sgems="n"
-        nvar=0
     else
         print *,"erro - nao sei ler isso"
         stop
@@ -129,10 +131,8 @@ elseif (op==3) then
     read *,sgems
     if (sgems=="s" .or. sgems=="S") then
         sgems="s"
-        nvar=1
     elseif (sgems=="n" .or. sgems=="N") then
         sgems="n"
-        nvar=0
     else
         print *,"erro - nao sei ler isso"
         stop
@@ -174,43 +174,18 @@ elseif (op==5) then
     print *,P1
     print *,"operacao concluida em ",tempo(timer)
 elseif (op==6) then
-    print *,"opcao 6"
-    print *,"atencao: a grid inicial vai ser alterada"
-    print *,"dimensao maxima em z a escrever"
-    read *,zef
-    print *,"mapa de planificacao a abrir: caminho/nome"
-    read *,mp_bend
-    print *,"ficheiro SGeMS? (s/n)"
-    read *,sgems
-    if (sgems=="s" .or. sgems=="S") then
-        nvar=1
-    elseif (sgems=="n" .or. sgems=="N") then
-        nvar=0
-    else
-        print *,"erro - nao sei ler isso"
-        stop
-    end if
-    print *,"dimensoes do mapa: x y"
-    read (*,*) dg_2d(1),dg_2d(2)
-    dg_2d(3)=1
-    print *,"a ler mapa de planificacao"
-    call abre(mp_bend,nvar,dg_2d,hor,id+20,timer)
-    print *,"mapa lido em ",tempo(timer)
-    print *,"output com cabecario SGeMS? (s/n)"
-    read *,sgems
-    if (sgems=="s" .or. sgems=="S") then
-        sgems="s"
-        nvar=1
-    elseif (sgems=="n" .or. sgems=="N") then
-        sgems="n"
-        nvar=0
-    else
-        print *,"erro - nao sei ler isso"
-        stop
-    end if
-    call novo(sgems,nvar,id,output,batch,timer)
-    print *,"a planificar grid"
-	call bender(dg(1),dg(2),dg(3),-999.25,id,output,zef,hor,res,timer)
+	print *,"opcao 6"
+	print *,"inserir quartil (percentil) a calcular"
+	read *,p
+	call quartil(res,p,q,timer)
+	print '("o quartil ",f4.2," e ",f)',p,q
+	print *,"operacao concluida em ",tempo(timer)
+elseif (op==7) then
+	print *,"opcao 7"
+	print *,"inserir valor"
+	read *,q
+	call quartil_updt(res,q,p,timer)
+	print *,"o quartil para o valor",q,"e'",p
 	print *,"operacao concluida em ",tempo(timer)
 elseif (op==0) then
     print *,"programa terminado"
@@ -250,18 +225,37 @@ write (time,format) te
 time=time(1:len_trim(time))//trim(uni)
 end function tempo
 
+subroutine header_ask(tipo,gslib)
+character(len=1),intent(in)::tipo
+logical,intent(out)::gslib
+character(len=1)::resp
+if (tipo=="r") print *,"ficheiro de input tem cabecario? (s/n)"
+if (tipo=="w") print *,"ficheiro de output tem cabecario? (s/n)"
+read *,resp
+if (resp=="s" .or. resp=="S") then
+    gslib=.TRUE.
+elseif (sgems=="n" .or. sgems=="N") then
+    gslib=.FALSE.
+else
+    print *,"erro - resposta incorrecta"
+    stop
+end if
+end subroutine header_ask
+
 ! carrega o ficheiro de dados para um vector
-subroutine abre(ficheiro,nvar,dg,grida,id,timer)
+subroutine abre(ficheiro,nvar,dg,nd,grida,id,timer)
 character(len=256), intent(in) :: ficheiro
 integer, intent(in) :: dg(3),id
 integer, intent(inout) :: nvar
 type(grid),intent(out)::grida
+real,intent(in)::nd
 real,intent(out)::timer
 real::start,finish
 call cpu_time(start)
 grida%dx=dg(1)
 grida%dy=dg(2)
 grida%dz=dg(3)
+grida%nd=nd
 allocate(grida%val(product(dg))) ! o vector-grid tem dimensao=produto(3dimensoes.grid)
 open (id, file=ficheiro, action='read')
 if (nvar>0) then
@@ -331,7 +325,7 @@ do i=1,nr_sims
     sim=trim(base)//trim(simN)//trim(ext)
     inquire (file=sim,exist=file_exists)
     if (file_exists) then
-        call abre(sim,nvar,dg,gridsim,id,t)
+        call abre(sim,nvar,dg,0.0,gridsim,id,t)
         sims(i,:)=gridsim%val
         id=id+1
     else
@@ -350,7 +344,7 @@ integer,intent(in)::nvar,batch
 integer,intent(inout)::id
 character(len=256),intent(out)::newfile
 character(len=50)::nv,novonome
-real,intent(out),optional::timer
+real,intent(out)::timer
 real::start,finish
 call cpu_time(start)
 id=id+1
@@ -532,42 +526,55 @@ call cpu_time(finish)
 timer=finish-start
 end subroutine likely
 
-subroutine bender(x,y,z,nd,id,output,zef,hor,res,timer)
-integer::yc,xc,zc,k
-integer,intent(in)::x,y,z,zef
-real,intent(in)::nd
-type(grid),intent(inout)::res
-type(grid),intent(in)::hor
-real,optional,intent(out)::timer
-character(len=256),intent(in)::output
+subroutine quartil(res,p,q,timer)
+type(grid),intent(in)::res
+real,intent(inout)::p
+real,intent(out)::q,timer
+type(grid)::aux,aux2
+integer::i
 real::start,finish
 call cpu_time(start)
-yc=0
-do while(yc<y)
-    xc=0
-    do while(xc<x)
-        zc=0
-        do while(zc<z)
-            if (hor%val(x*yc+xc+1)-zc>=0) then
-                res%val(x*y*zc+x*yc+xc+1)=res%val(1+x*y*(hor%val(x*yc+xc+1)-zc)+x*yc+xc)
-            else
-                res%val(1+x*y*zc+x*yc+xc)=nd
-            end if
-            zc=zc+1
-        end do
-        xc=xc+1
-    end do
-    yc=yc+1
-end do
-k=0
-open (id,file=output,action='write')
-do while(k<x*y*zef)
-    write (id,*) res%val(k+1)
-    k=k+1
-end do
-close(id)
+aux=res
+if (p>1) p=p/100
+call QsortC(aux%val)
+call del_sorted_nd(aux%val,aux2%val,res%nd)
+deallocate(aux%val)
+i=size(aux2%val)*p
+q=aux2%val(i)
 call cpu_time(finish)
 timer=finish-start
-end subroutine bender
+end subroutine quartil
+
+subroutine quartil_updt(res,q,p,timer)
+type(grid),intent(in)::res
+real,intent(in)::q
+real,intent(out)::p,timer
+type(grid)::aux,aux2
+real::i,start,finish
+call cpu_time(start)
+aux=res
+call QsortC(aux%val)
+call del_sorted_nd(aux%val,aux2%val,res%nd)
+deallocate(aux%val)
+do i=1,size(aux2%val)
+	if (aux2%val(i)>=q) exit
+end do
+p=i/size(aux2%val)
+call cpu_time(finish)
+timer=finish-start
+end subroutine quartil_updt
+
+subroutine del_sorted_nd(data,aux,nd)
+real,dimension(:),intent(in)::data
+real,allocatable,dimension(:),intent(out)::aux
+real,intent(in)::nd
+integer::i,a
+do i=1,size(data)
+	if (data(i) .ne. nd) exit
+end do
+a=size(data)
+allocate (aux(size(data)-i+1))
+aux=data(i:a)
+end subroutine del_sorted_nd
 
 end program
