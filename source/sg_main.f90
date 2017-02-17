@@ -4,24 +4,25 @@ use qsort_c_module
 implicit none
 
 ! declaracao de variaveis
-integer::i,op,nvar,fid,batch,nr_sims,nr_p
+integer::i,op,nvar,fid,batch,nr_sims,nr_p,zef
 integer,dimension(3)::dg,pa,pb,dg_2d
-character(len=256)::ficheiro,output,pocos,base
+character(len=256)::ficheiro,output,pocos,base,mp_bend
 character(len=1)::load,mp_p
 logical::mp,header
 real,allocatable::sims(:,:)
 integer,allocatable::px(:),py(:)
 real::P_x,P1,timer,nd,p,q
+
 ! tipo de dados grid
 type::grid
     integer::dx,dy,dz
     real::nd
     real,allocatable::val(:)
 end type grid
-type(grid)::res
+type(grid)::res,hor
 fid=10
 ! input inicial
-print *,"----|| s u b g r i d e r  v0.19 ||----"
+print *,"----|| s u b g r i d e r  v0.19.3 ||----"
 print *,""
 print *,"carregar o ficheiro anterior? (s/n)"
 read *,load
@@ -56,15 +57,17 @@ do
 batch=-1
 print *,""
 print *,"escolher uma opcao"
-print *,"1 ----- poco vertical "
-print *,"  1.1 - a partir das coordenadas (x,y)"
+print *,"1 - obter um poco vertical a partir das coordenadas (x,y)"
+!print *,"1 ----- poco vertical "
+!print *,"  1.1 - a partir das coordenadas (x,y)"
 print *,"2 - obter n pocos verticais a partir de um ficheiro com coordenadas (x,y)"
 print *,"3 - obter uma grid a partir um volume (cubo, paralelipipedo) da grid inicial"
 print *,"4 - criar uma mascara (data=1, no data=0)"
 print *,"5 - calcular verosimilhanca"
 print *,"6 - calcular percentil"
 print *,"7 - corrigir quantil"
-print *,"0 - sairs"
+print *,"8 - bender"
+print *,"0 - sair"
 read *,op
 if (op==1) then
     print *,"opcao 1"
@@ -82,7 +85,7 @@ elseif (op==2) then
 	call checkfile(pocos)
     print *,"a ler ficheiro ",trim(pocos),"..."
     call abre_pocos(pocos,px,py,timer)
-    print *,trim(pocos)," carregado em",tempo(timer)
+    print *,trim(pocos)," carregado em ",tempo(timer)
     call header_ask("w",header,nvar)
     batch=0
 	call novo(header,nvar,fid,output,batch,timer)
@@ -115,21 +118,28 @@ elseif (op==5) then
     print *,"opcao 5"
     print *,"numero de simulacoes realizadas (ficheiros *_simX.OUT)"
     read *,nr_sims
-    base=ficheiro(1:len_trim(ficheiro)-4)//'_sim'
+! <alt>
+    print *,"base"
+    read *,base
+! <\alt>
+!    base=ficheiro(1:len_trim(ficheiro)-4)//'_sim'
     call header_ask("r",header,nvar)
     print *,"a carregar grids simuladas..."
     call abre_sims(nr_sims,sims,dg,base,'.OUT',header,timer)
     print *,nr_sims,"grids carregadas em ",tempo(timer)
-    print *,"produzir grid com mapa de probabilidades? (s/n)"
-    read *,mp_p
-    if (mp_p=="s" .or. mp_p=="S") then
-        mp=.true.
-    elseif (mp_p=="n" .or. mp_p=="N") then
-        mp=.false.
-    else
-        print *,"erro - input invalido."
-        stop
-    end if
+	do
+	    print *,"produzir grid com mapa de probabilidades? (s/n)"
+    	read *,mp_p
+	    if (mp_p=="s" .or. mp_p=="S") then
+    	    mp=.true.
+    	    exit
+    	elseif (mp_p=="n" .or. mp_p=="N") then
+        	mp=.false.
+        	exit
+    	else
+        	print *,"erro - input invalido."
+		end if
+	end do
     if (mp) then
     	call header_ask("w",header,nvar)
     	call novo(header,nvar,fid,output,batch,timer)
@@ -138,21 +148,51 @@ elseif (op==5) then
 	read *,P_x
     print *,"a calcular probabilidades..."
     call likely(res,sims,P_x,P1,mp,fid,output,header,timer)
-    print *,"a probabilidade e' ",P1
+    print *,"a probabilidade e' ",trim(rtochar(P1))
+    print *,"operacao concluida em ",tempo(timer)
+    ! colocado aqui temporariamente, incorporar como batch do percentil
+    print *,""
+    print *,"percentis das simulacoes"
+    call header_ask("w",header,nvar)
+    call novo(header,nvar,fid,output,batch,timer)
+    print *,"inserir percentil"
+    read *,p
+    print *,"a calcular percentis..."
+    call percentil_sims(sims,p,P_x,fid,header,output,timer)
     print *,"operacao concluida em ",tempo(timer)
 elseif (op==6) then
 	print *,"opcao 6"
 	print *,"inserir percentil a calcular"
 	read *,p
 	call percentil(res,p,q,timer)
-	print '("o percentil ",f4.2," e ",f)',p,q
+	print '("o percentil ",f4.2," e ",a)',p,trim(rtochar(q))
 	print *,"operacao concluida em ",tempo(timer)
 elseif (op==7) then
 	print *,"opcao 7"
 	print *,"inserir valor"
 	read *,q
 	call percentil_updt(res,q,p,timer)
-	print *,"o valor ",q," corresponde ao percentil ",p
+	print *,"o valor ",trim(rtochar(q))," corresponde ao percentil ",trim(rtochar(p))
+	print *,"operacao concluida em ",tempo(timer)
+elseif (op==8) then
+    print *,"opcao 8"
+    print *,"atencao: a grid inicial (alocada) vai ser alterada"
+    print *,"dimensao maxima em z a escrever"
+    read *,zef
+    print *,"mapa de planificacao a abrir: caminho/nome"
+    read *,mp_bend
+    call checkfile(mp_bend)
+	call header_ask("r",header,nvar)
+    print *,"dimensoes do mapa: x y"
+    read (*,*) dg_2d(1),dg_2d(2)
+    dg_2d(3)=1
+    print *,"a ler mapa de planificacao..."
+    call abre(mp_bend,header,dg_2d,nd,hor,fid+20,timer) !nd
+    print *,"mapa ",trim(mp_bend)," lido em ",tempo(timer)
+	call header_ask("w",header,nvar)
+    call novo(header,nvar,fid,output,batch,timer)
+    print *,"a planificar grid..."
+	call bender(dg(1),dg(2),dg(3),-999.25,fid,output,header,zef,hor,res,timer)
 	print *,"operacao concluida em ",tempo(timer)
 elseif (op==0) then
     print *,"programa terminado"
@@ -192,6 +232,35 @@ write (time,format) te
 time=time(1:len_trim(time))//trim(uni)
 end function tempo
 
+! funcao para converter inteiro para caracter(256)
+function itochar(i) result(x)
+integer,intent(in)::i
+character(len=256)::x
+write (x,*) i
+end function itochar
+
+! funcao para converter real para caracter(256)
+function rtochar(r) result(x)
+real,intent(in)::r
+character(len=256)::x
+write (x,*) r
+end function rtochar
+
+! calcula a media de um vector
+function media(data) result(med)
+real,intent(in),dimension(:)::data
+real::med
+med=sum(data)/size(data)
+end function
+
+! calcula a variancia de um vector
+function variancia(data) result(var)
+real,intent(in),dimension(:)::data
+real::var
+var=sum(data**2)-sum(data)**2
+end function variancia
+
+! pergunta se o ficheiro a ler/escrever tem cabecario
 subroutine header_ask(tipo,header,nvar)
 character(len=1),intent(in)::tipo
 logical,intent(out)::header
@@ -199,7 +268,7 @@ integer,intent(out)::nvar
 character(len=1)::resp
 do
 	if (tipo=="r") print *,"ficheiro de input tem cabecario? (s/n)"
-	if (tipo=="w") print *,"ficheiro de output tem cabecario? (s/n)"
+	if (tipo=="w") print *,"ficheiro de output com cabecario? (s/n)"
 	read *,resp
 	if (resp=="s" .or. resp=="S") then
 	    header=.TRUE.
@@ -215,9 +284,10 @@ do
 end do
 end subroutine header_ask
 
+! salta o cabecario de um ficheiro
 subroutine header_skip(id)
 integer,intent(in)::id
-integer::nvar
+integer::nvar,i
 read (id,*)
 read (id,*) nvar
 do i=1,nvar
@@ -225,6 +295,7 @@ do i=1,nvar
 end do
 end subroutine header_skip
 
+! verifica se um ficheiro existe
 subroutine checkfile(file)
 character(len=*),intent(in)::file
 logical::file_exists
@@ -275,9 +346,6 @@ do i=1,n
     read (19,*) px(i),py(i)
 end do
 close(19)
-print '("carregadas as coordenadas de ",I3," pocos.")',n
-print *,"ficheiro ",trim(pocos)," nao encontrado."
-stop
 call cpu_time(finish)
 timer=finish-start
 end subroutine abre_pocos
@@ -334,27 +402,26 @@ open (id,file=newfile,action='write')
 if (header) then
 	if (batch>=0) then
 		novonome=newfile(1:len_trim(newfile)-4)
-    	write(id,*) novonome
-    	write (id,*) nvar
+    	write(id,*) trim(novonome)
+    	write (id,*) trim(itochar(nvar))
     	nv='var'
     	do i=1,nvar
-        	write (id,*) nv
+        	write (id,*) trim(nv)
     	end do
 	else
 	    print *,"nome do conjunto de dados"
     	read *,novonome
-    	write(id,*) novonome
-    	write (id,*) nvar
+    	write(id,*) trim(novonome)
+    	write (id,*) trim(itochar(nvar))
     	print *,"nomes das variaveis (espacados com enter)"
     	do i=1,nvar
         	read *,nv
-        	write (id,*) nv
+        	write (id,*) trim(nv)
     	end do
 	end if
 end if
 close(id)
 call cpu_time(finish)
-print *,"ai"
 timer=finish-start
 end subroutine novo
 
@@ -375,7 +442,7 @@ if (batch>=0) then
 	do m=1,batch
 		read (id,*)
 	end do
-	batch=batch+93
+	batch=batch+res%dz
 end if
 do z=1,res%dz
 	p=xp+res%dx*(yp-1)+res%dx*res%dy*(z-1)
@@ -455,8 +522,8 @@ real,intent(out)::timer
 integer,intent(in)::id
 logical,intent(in)::mp,header
 character(len=256),intent(in)::output
-integer::j,l,a,b
-real::start,finish
+integer::j,l,a
+real::start,finish,b
 call cpu_time(start)
 if (mp) then
 	open(id,file=output)
@@ -478,6 +545,8 @@ do j=1,size(res%val)
 !            write (33,*) p,b ! dd
         end do
         if (mp) write (id,*) b/size(sims,1)
+    else
+        if (mp) write (id,*) res%nd
     end if
 !    write (33,*) j,a ! dd
 end do
@@ -487,6 +556,7 @@ call cpu_time(finish)
 timer=finish-start
 end subroutine likely
 
+! calcula o percentil p de uma grid
 subroutine percentil(res,p,q,timer)
 type(grid),intent(in)::res
 real,intent(inout)::p
@@ -507,6 +577,42 @@ call cpu_time(finish)
 timer=finish-start
 end subroutine percentil
 
+! percentil para matriz de simulacoes
+subroutine percentil_sims(sims,p,q,id,header,output,timer)
+real,dimension(:,:),intent(in)::sims
+real,intent(in)::p
+real,intent(in)::q
+integer,intent(in)::id
+logical,intent(in)::header
+character(len=256)::output
+real,intent(out)::timer
+type(grid)::aux
+integer::i
+real,allocatable,dimension(:)::ps,qs
+real::start,finish,t,psim,qsim,pp
+call cpu_time(start)
+open (id,file=output)
+if (header) call  header_skip(id)
+allocate(ps(size(sims,1)))
+allocate(qs(size(sims,1)))
+allocate(aux%val(size(sims,2)))
+pp=p
+do i=1,size(sims,1)
+    aux%val=sims(i,:)
+    call percentil(aux,pp,qsim,t)
+    call percentil_updt(aux,q,psim,t)
+    ps(i)=qsim
+    qs(i)=psim
+    write (id,*) qsim,psim
+end do
+write (id,*) "media ",media(ps),media(qs)
+write (id,*) "variancia ",variancia(ps),variancia(qs)
+close(id)
+call cpu_time(finish)
+timer=finish-start
+end subroutine percentil_sims
+
+! calcula o percentil correspondente a um determinado valor
 subroutine percentil_updt(res,q,p,timer)
 type(grid),intent(in)::res
 real,intent(in)::q
@@ -527,6 +633,7 @@ call cpu_time(finish)
 timer=finish-start
 end subroutine percentil_updt
 
+! elimina os no-data's num vector ordenado; auxiliar para percentil() e percentil_updt()
 subroutine del_sorted_nd(data,aux,nd,timer)
 real,dimension(:),intent(in)::data
 real,allocatable,dimension(:),intent(out)::aux
@@ -544,5 +651,48 @@ aux=data(i:a)
 call cpu_time(finish)
 timer=finish-start
 end subroutine del_sorted_nd
+
+! planifica uma grid a partir de um mapa de planificacao previamente carregado
+subroutine bender(x,y,z,nd,id,output,header,zef,hor,res,timer)
+integer::yc,xc,zc,k
+integer,intent(in)::x,y,z,zef,id
+real,intent(in)::nd
+type(grid),intent(inout)::res
+type(grid),intent(in)::hor
+real,intent(out)::timer
+character(len=256),intent(in)::output
+logical,intent(in)::header
+real::start,finish
+integer::h
+call cpu_time(start)
+yc=0
+do while(yc<y)
+    xc=0
+    do while(xc<x)
+        zc=0
+        do while(zc<z)
+        	h=hor%val(x*yc+xc+1) !tentar com nint(real)
+            if (zc<z-h) then
+                res%val(x*y*zc+x*yc+xc+1)=res%val(1+x*y*(h+zc)+x*yc+xc)
+            else
+                res%val(1+x*y*zc+x*yc+xc)=nd
+            end if
+            zc=zc+1
+        end do
+        xc=xc+1
+    end do
+    yc=yc+1
+end do
+k=0
+open (id,file=output,action='write')
+if (header) call header_skip(id)
+do while(k<x*y*zef)
+    write (id,*) res%val(k+1)
+    k=k+1
+end do
+close(id)
+call cpu_time(finish)
+timer=finish-start
+end subroutine bender
 
 end program
