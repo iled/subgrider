@@ -72,7 +72,7 @@ id=id+1
 !    newfile='wells.prn'
     !newfile=ficheiro(1:len_trim(ficheiro)-4)//'_wells.prn'
 !else
-    print *,"nome do ficheiro"
+    print *,"novo: nome do ficheiro"
     read *,newfile
 !end if
 open (id,file=newfile,action='write')
@@ -86,11 +86,11 @@ if (header) then
             write (id,*) trim(nv)
         end do
     else
-        print *,"nome do conjunto de dados"
+        print *,"novo: nome do conjunto de dados"
         read *,novonome
         write(id,*) trim(novonome)
         write (id,*) trim(itochar(nvar))
-        print *,"nomes das variaveis (espacados com enter)"
+        print *,"novo: nomes das variaveis (espacados com enter)"
         do i=1,nvar
             read *,nv
             write (id,*) trim(nv)

@@ -12,21 +12,36 @@ implicit none
 ! declaracao de variaveis
 integer::i,j,nvar,fid,batch,nr_sims(2),nr_p,zef,ask_simmedvar,k,bl_n
 integer,dimension(3)::dg,pa,pb,dg_2d,bl_dim
-character(len=256)::ficheiro,output,pocos,base,mp_bend,bgeost
+character(len=256)::ficheiro,output,pocos,base,mp_bend,bgeost,cmd
 character(len=1)::load,mp_p
 logical::mp,header,do_med,do_var,did_load,did_loadsims
 real,allocatable::sims(:,:)
 integer,allocatable::px(:),py(:),wells(:,:,:)
-real::P_x(2),P1,timer,nd,p,q,op,p_sim(2),bl_e
+real::P_x(2),P1,timer,nd,p,q,op,p_sim(2),bl_e,pt_size(3)
 type(grid)::res,hor
 
 did_load=.FALSE.
 did_loadsims=.FALSE.
+
+!interpretacao de argumentos
+
+if (command_argument_count()>0) then
+    call get_command_argument(1,cmd)
+    if (trim(cmd)=="7.1") then
+        print *,"under construction..."
+    else
+        print *,"opcao invalida ou nao implementada."
+        stop
+    end if
+
+end if
+
+
 !ciclo principal
 do
 batch=-1
 print *,""
-print *,"----|| s u b g r i d e r  v0.2.6 <<jc 2010-2011>> ||----"
+print *,"----|| s u b g r i d e r  v0.2.7 <<jc 2010-2011>> ||----"
 print *,""
 print *,"escolher uma opcao"
 print *,""
@@ -320,14 +335,16 @@ elseif (op==6.1 .and. did_loadsims) then
 elseif (op==7.1 .and. did_load) then
     print *,"criar conjunto de coarse data (blocos) a partir de uma grid"
     print *,""
+    print *,"dimensoes dos pontos da grid carregada (temp)"
+    read *,pt_size
     print *,"dimensoes do bloco resultante da discretizacao (x,y,z)"
-    read *,bl_dim
+    read (*,*) bl_dim
     print *,"erro dos blocos (noise)"
     read *,bl_e
     header=.FALSE.
     call novo(header,nvar,fid,output,batch,timer)
     print *,"a calcular blocos..."
-    call blocking_dim(bl_dim,bl_e,res,fid,output,bl_n,timer)
+    call blocking_dim(pt_size,bl_dim,bl_e,res,fid,output,bl_n,timer)
     print *,"operacao concluida em ",tempo(timer)
     print *,"numero de blocos resultantes: ",bl_n
     call wait()

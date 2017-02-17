@@ -7,7 +7,7 @@ use sg_gridutils
 use pointers
 implicit none
 
-public::abre,bender,likely,mask,pp,subgrid,simmedvar,unbender,blocking_dim,blocking_num,bgeost_ps
+public::abre,bender,likely,mask,pp,subgrid,simmedvar,unbender,blocking_dim,blocking_num,bgeost_ps,refin
 
 private
 
@@ -101,9 +101,9 @@ end subroutine subgrid
 
 ! discretiza uma grid em blocos e gera output para BGeost
 ! recebe as dimensoes pretendidas do bloco
-subroutine blocking_dim(bl_dim,bl_e,res,id,output,bl_n,timer)
+subroutine blocking_dim(pt_size,bl_dim,bl_e,res,id,output,bl_n,timer)
 integer,dimension(3),intent(in)::bl_dim
-real,intent(in)::bl_e
+real,intent(in)::bl_e,pt_size(3)
 integer,intent(in)::id
 type(grid),intent(in)::res
 character(len=256),intent(in)::output
@@ -151,7 +151,7 @@ do while (bl_pf(3)<=res%dz)
 		            i_x=0
 		            do while (i_x<=(bl_pf(1)-bl_pi(1)))
 		                call lista_adf(temp_list,res%val(i_y+i_x))
-		                temp_pset(i_pset,:)=gridcoord(0.0,0.0,0.0,1.0,res%dx,res%dy,res%dz,i_y+i_x) !xi,yi,zi,bl_size
+		                temp_pset(i_pset,:)=get_3dcoord(0.0,0.0,0.0,pt_size,res%dx,res%dy,res%dz,i_y+i_x) !xi,yi,zi,bl_size
 		                i_x=i_x+1
 		                i_pset=i_pset+1
 		            end do
@@ -254,8 +254,6 @@ do
         if (st<0) then
             if (nb.ne.bl) then
                 print *,"aviso: numero de blocos inconsistente",bl," blocos encontrados"
-            !else
-            !    print *,"ok"
             end if
             close(id)
 			close(id+3)
@@ -279,6 +277,45 @@ do
     end if
 end do
 end subroutine bgeost_ps
+
+!refinamento sem interpolacao de uma grid (blocos em pontos)
+subroutine refin(bl_dim,header,res,id,output,timer)
+integer,dimension(3),intent(in)::bl_dim
+integer,intent(in)::id
+type(grid),intent(in)::res
+logical,intent(in)::header
+character(len=256),intent(in)::output
+integer::i,j,k,coord_o(3),coord_n(3),nc
+character(len=4)::format,n_b
+real,intent(out)::timer
+real::start,finish
+type(lista)::temp_list
+real,allocatable,dimension(:)::temp_arr
+real,allocatable,dimension(:,:)::temp_pset
+call cpu_time(start)
+open (id,file=output)
+if (header) call header_skip(id)
+k=0
+do while (k<res%dz*bl_dim(3))
+    j=0
+    do while (j<res%dy*bl_dim(2))
+        i=0
+        do while (i<res%dx*bl_dim(1))
+            coord_n=(/i+1,j+1,k+1/)
+            do nc=1,3
+                coord_o(nc)=int(coord_n(nc)/real(bl_dim(nc))+0.5)
+            end do
+            write(id,*) res%val(coord_o(1)+res%dx*(coord_o(2)-1)+res%dx*res%dy*(coord_o(3)-1))
+            i=i+1
+        end do
+        j=j+1
+    end do
+    k=k+1
+end do
+close(id)
+call cpu_time(finish)
+timer=finish-start
+end subroutine refin
 
 ! mascara (troca data por m1 e no data por m2)
 subroutine mask(m1,m2,header,res,id,output,timer)

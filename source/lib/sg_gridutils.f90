@@ -6,7 +6,7 @@ module sg_gridutils
 use qsort_c
 implicit none
 
-public::checkfile,del_sorted_nd,header_skip,itochar,media,percentil,percentil_sims,percentil_updt,rtochar,variancia,gridcoord,front_trim
+public::checkfile,del_sorted_nd,header_skip,itochar,media,percentil,percentil_sims,percentil_updt,rtochar,variancia,gridcoord,front_trim,get_3dcoord
 
 private
 
@@ -171,18 +171,33 @@ timer=finish-start
 end subroutine del_sorted_nd
 
 ! recebe o numero de uma linha de um grid e devolve as coordenadas associadas
+! deprecated version
 function gridcoord(xi,yi,zi,bl_dim,dx,dy,dz,l) result(coord)
-real, intent(in):: xi,yi,zi,bl_dim
+real, intent(in):: xi,yi,zi,bl_dim(3)
 integer, intent(in)::l,dx,dy,dz
 real::coord(3)
 real(kind=8)::A,B,C
-C=bl_dim/real((dx*dy*dz))
+C=bl_dim(1)/real((dx*dy*dz))
 A=floor(l/real((dx*dy))-C)
 B=l-dx*dy*A
-coord(1)=xi+bl_dim*(l-dx*floor(l/real(dx)-C))
-coord(2)=yi+bl_dim*(floor(B/real(dx)-C)+1)
-coord(3)=zi+bl_dim*(A+1)
+coord(1)=xi+bl_dim(1)*(l-dx*floor(l/real(dx)-C))
+coord(2)=yi+bl_dim(2)*(floor(B/real(dx)-C)+1)
+coord(3)=zi+bl_dim(3)*(A+1)
 end function gridcoord
+
+function get_3dcoord(xi,yi,zi,bl_dim,dx,dy,dz,l) result(coord)
+integer,intent(in)::dx,dy,dz,l !ind,xlen,xylen
+real,intent(in)::xi,yi,zi,bl_dim(3)
+real::x,y,z,coord(3)
+integer::t
+z=(l-1)/(dx*dy)+1
+t=(mod(l-1,(dx*dy)))
+y=t/dx+1
+x=mod(l-1,dx)+1
+coord(1)=xi+bl_dim(1)*x
+coord(2)=yi+bl_dim(2)*y
+coord(3)=zi+bl_dim(3)*z
+end function get_3dcoord
 
 ! devolve o numero da primeira entrada de uma string diferente de espaco
 function front_trim(str) result(ftlen)
