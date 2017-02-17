@@ -9,6 +9,8 @@ implicit none
 
 public::abre_pocos,abre_sims,header_ask,novo,rand_int,rand_well,tempo
 
+private
+
 contains
 
 ! pergunta se o ficheiro a ler/escrever tem cabecario

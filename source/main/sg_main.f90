@@ -1,4 +1,4 @@
-! subgrider :: Julio Caineta, 2010
+! subgrider :: Julio Caineta, 2010-2011
 ! sg_main :: interface
 
 program subgrider
@@ -10,14 +10,14 @@ use sg_gridutils
 implicit none
 
 ! declaracao de variaveis
-integer::i,j,nvar,fid,batch,nr_sims(2),nr_p,zef,ask_simmedvar,k
-integer,dimension(3)::dg,pa,pb,dg_2d
-character(len=256)::ficheiro,output,pocos,base,mp_bend
+integer::i,j,nvar,fid,batch,nr_sims(2),nr_p,zef,ask_simmedvar,k,bl_n
+integer,dimension(3)::dg,pa,pb,dg_2d,bl_dim
+character(len=256)::ficheiro,output,pocos,base,mp_bend,bgeost
 character(len=1)::load,mp_p
 logical::mp,header,do_med,do_var,did_load,did_loadsims
 real,allocatable::sims(:,:)
 integer,allocatable::px(:),py(:),wells(:,:,:)
-real::P_x(2),P1,timer,nd,p,q,op,p_sim(2)
+real::P_x(2),P1,timer,nd,p,q,op,p_sim(2),bl_e
 type(grid)::res,hor
 
 did_load=.FALSE.
@@ -26,7 +26,7 @@ did_loadsims=.FALSE.
 do
 batch=-1
 print *,""
-print *,"----|| s u b g r i d e r  v0.2.5 <<jc 2010>> ||----"
+print *,"----|| s u b g r i d e r  v0.2.6 <<jc 2010-2011>> ||----"
 print *,""
 print *,"escolher uma opcao"
 print *,""
@@ -38,18 +38,21 @@ print *,"1 ----- poco vertical "
 print *,"  1.1 - a partir das coordenadas (x,y)"
 print *,"  1.2 - a partir de um ficheiro com coordenadas (x,y)"
 print *,"  1.3 - reamostragem aleatoria a partir de ficheiro de coordenadas (x,y)"
-print *,"2 - obter uma grid a partir um volume (cubo, paralelipipedo) da grid inicial"
-print *,"3 - criar uma mascara (data=1, no data=0)"
+print *,"2 ----- obter uma grid a partir de um volume (cubo, paralelipipedo) da grid inicial"
+print *,"3 ----- criar uma mascara (data=1, no data=0)"
 print *,"4 ----- update bayesiano"
 print *,"  4.1 - calcular percentil"
 print *,"  4.2 - calcular quantil"
 print *,"  4.3 - calcular verosimilhanca"
-print *,"5 - planificacao"
+print *,"5 ----- planificacao"
 print *,"  5.1 - planificar uma grid a partir de um mapa de planificacao"
 print *,"  5.2 - entortar uma grid a partir de um mapa de planificacao (instavel)"
-print *,"6 - analise de simulacoes"
+print *,"6 ----- analise de simulacoes"
 print *,"  6.1 - media e variancia das simulacoes"
-print *,"9 - sair"
+print *,"7 ----- blocos"
+print *,"  7.1 - criar coarse data (formato BGeost) a partir de uma grid"
+print *,"  7.2 - converter formato BGeost em point set"
+print *,"9 ----- sair"
 read *,op
 if (op==0.1) then
     print *,"abrir ficheiro"
@@ -84,7 +87,6 @@ elseif (op==0.2) then
     call abre(ficheiro,header,dg,nd,res,fid,timer)
     print *,"ficheiro carregado em ",tempo(timer)
     did_load=.TRUE.
-    close(9)
     call wait()
 elseif (op==0.3) then
     print *,"abrir varios ficheiros numerados de A a B"
@@ -313,6 +315,31 @@ elseif (op==6.1 .and. did_loadsims) then
     call novo(header,nvar,fid,output,batch,timer)
     print *,"a calcular..."
     call simmedvar(do_med,do_var,sims,fid,output,header,timer)
+    print *,"operacao concluida em ",tempo(timer)
+    call wait()
+elseif (op==7.1 .and. did_load) then
+    print *,"criar conjunto de coarse data (blocos) a partir de uma grid"
+    print *,""
+    print *,"dimensoes do bloco resultante da discretizacao (x,y,z)"
+    read *,bl_dim
+    print *,"erro dos blocos (noise)"
+    read *,bl_e
+    header=.FALSE.
+    call novo(header,nvar,fid,output,batch,timer)
+    print *,"a calcular blocos..."
+    call blocking_dim(bl_dim,bl_e,res,fid,output,bl_n,timer)
+    print *,"operacao concluida em ",tempo(timer)
+    print *,"numero de blocos resultantes: ",bl_n
+    call wait()
+elseif (op==7.2) then
+    print *,"converter um ficheiro no formato BGeost para o formato point set"
+    print *,"nome do ficheiro BGeost"
+    read *,bgeost
+    call checkfile(bgeost)
+    header=.FALSE.
+    call novo(header,nvar,fid,output,batch,timer)
+    print *,"a converter..."
+    call bgeost_ps(fid,bgeost,output,timer)
     print *,"operacao concluida em ",tempo(timer)
     call wait()
 elseif (op==9) then

@@ -6,7 +6,9 @@ module sg_gridutils
 use qsort_c
 implicit none
 
-public::checkfile,del_sorted_nd,header_skip,itochar,media,percentil,percentil_sims,percentil_updt,rtochar,variancia
+public::checkfile,del_sorted_nd,header_skip,itochar,media,percentil,percentil_sims,percentil_updt,rtochar,variancia,gridcoord,front_trim
+
+private
 
 ! tipo de dados grid
 type, public::grid
@@ -134,14 +136,17 @@ type(grid),intent(in)::res
 real,intent(in)::q
 real,intent(out)::p
 real,intent(out)::timer
-real::start,finish,t
-integer::n,i
+type(grid)::aux,aux2
+real::i,start,finish,t
 call cpu_time(start)
-n=0
-do i=1,size(res%val)
-    if (res%val(i)<=q) n=n+1
+aux=res
+call QsortC(aux%val)
+call del_sorted_nd(aux%val,aux2%val,res%nd,t)
+deallocate(aux%val)
+do i=1,size(aux2%val)
+    if (aux2%val(i)>=q) exit
 end do
-p=n/real(size(res%val))
+p=i/size(aux2%val)
 call cpu_time(finish)
 timer=finish-start
 end subroutine percentil_updt
@@ -164,5 +169,31 @@ aux=data(i:a)
 call cpu_time(finish)
 timer=finish-start
 end subroutine del_sorted_nd
+
+! recebe o numero de uma linha de um grid e devolve as coordenadas associadas
+function gridcoord(xi,yi,zi,bl_dim,dx,dy,dz,l) result(coord)
+real, intent(in):: xi,yi,zi,bl_dim
+integer, intent(in)::l,dx,dy,dz
+real::coord(3)
+real(kind=8)::A,B,C
+C=bl_dim/real((dx*dy*dz))
+A=floor(l/real((dx*dy))-C)
+B=l-dx*dy*A
+coord(1)=xi+bl_dim*(l-dx*floor(l/real(dx)-C))
+coord(2)=yi+bl_dim*(floor(B/real(dx)-C)+1)
+coord(3)=zi+bl_dim*(A+1)
+end function gridcoord
+
+! devolve o numero da primeira entrada de uma string diferente de espaco
+function front_trim(str) result(ftlen)
+character(len=*), intent(in)::str
+integer::ftlen,i
+do i=1,len_trim(str)
+    if (str(i:i).ne.' ') then
+        ftlen=i
+        return
+    end if
+end do
+end function front_trim
 
 end module sg_gridutils

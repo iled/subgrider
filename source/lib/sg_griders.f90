@@ -4,9 +4,12 @@
 module sg_griders
 
 use sg_gridutils
+use pointers
 implicit none
 
-public::abre,bender,likely,mask,pp,subgrid,simmedvar,unbender
+public::abre,bender,likely,mask,pp,subgrid,simmedvar,unbender,blocking_dim,blocking_num,bgeost_ps
+
+private
 
 contains
 
@@ -71,14 +74,12 @@ integer,intent(in)::id
 type(grid),intent(in)::res
 character(len=256),intent(in)::output
 logical,intent(in)::header
-integer::pi,pf,d,p(3),j,c,v,nvar
+integer::j,c,v,i
 real,intent(out)::timer
 real::start,finish
-integer::i
 call cpu_time(start)
 open (id,file=output)
 if (header) call header_skip(id)
-p=pa
 c=res%dx*res%dy
 j=pa(3)-1
 do while (j<pb(3))
@@ -97,6 +98,187 @@ close(id)
 call cpu_time(finish)
 timer=finish-start
 end subroutine subgrid
+
+! discretiza uma grid em blocos e gera output para BGeost
+! recebe as dimensoes pretendidas do bloco
+subroutine blocking_dim(bl_dim,bl_e,res,id,output,bl_n,timer)
+integer,dimension(3),intent(in)::bl_dim
+real,intent(in)::bl_e
+integer,intent(in)::id
+type(grid),intent(in)::res
+character(len=256),intent(in)::output
+integer,intent(out)::bl_n
+integer::lyr,i_x,i_y,i_z,bl_pi(3),bl_pf(3),i_list,status,i_pset
+character(len=4)::format,n_b
+character(len=64)::copy
+real,intent(out)::timer
+real::start,finish,bl_m
+type(lista)::temp_list
+real,allocatable,dimension(:)::temp_arr
+real,allocatable,dimension(:,:)::temp_pset
+call cpu_time(start)
+open (id,status='scratch') !file='tmp.log')
+write (id,*) trim(output)//"_blocks"
+write (id,*)
+bl_n=0
+bl_pi=(/1,1,1/)
+!i_blz=dg(3)-1
+bl_pf(3)=bl_pi(3)+bl_dim(3)-1
+do while (bl_pf(3)<=res%dz)
+    bl_pi(2)=1
+    bl_pf(2)=bl_pi(2)+bl_dim(2)-1
+    do while (bl_pf(2)<=res%dy)
+        bl_pi(1)=1
+        bl_pf(1)=bl_pi(1)+bl_dim(1)-1
+        do while (bl_pf(1)<=res%dx)
+            i_pset=1
+            bl_n=bl_n+1
+            !allocate(temp_arr(bl_pf(1)-b))
+            allocate(temp_pset(res%dx*res%dy*res%dz,3)) !aldrabado
+		    if (bl_n<10) format="(I1)"
+		    if (bl_n>=10 .and. bl_n<100) format="(I2)"
+		    if (bl_n>=100 .and. bl_n<1000) format="(I3)"
+		    if (bl_n>=1000 .and. bl_n<10000) format="(I4)"
+		    write (n_b,format) bl_n
+		    write (id,*) "block_"//trim(n_b)
+		    temp_list=lista_nova()
+		    ! subgrider
+		    lyr=res%dx*res%dy
+		    i_z=bl_pi(3)-1
+		    do while (i_z<bl_pf(3))
+		        i_y=i_z*lyr+res%dx*(bl_pi(2)-1)+bl_pi(1)
+		        do while (i_y<=(bl_pf(2)-1)*res%dx+bl_pi(1)+i_z*lyr)
+		            i_x=0
+		            do while (i_x<=(bl_pf(1)-bl_pi(1)))
+		                call lista_adf(temp_list,res%val(i_y+i_x))
+		                temp_pset(i_pset,:)=gridcoord(0.0,0.0,0.0,1.0,res%dx,res%dy,res%dz,i_y+i_x) !xi,yi,zi,bl_size
+		                i_x=i_x+1
+		                i_pset=i_pset+1
+		            end do
+		            i_y=i_y+res%dx
+		        end do
+		        i_z=i_z+1
+		    end do
+		    ! /subgrider
+		    call lista_array(temp_list,temp_arr)
+		    write (id,*) sum(temp_arr,mask=temp_arr.ne.res%nd)/real(count(temp_arr.ne.res%nd))
+		    write (id,*) bl_e
+		    do i_list=1,lista_comp(temp_list)
+                write (id,*) temp_pset(i_list,:),temp_arr(i_list)
+		    end do
+            bl_pf(1)=bl_pf(1)+bl_dim(1)
+            if (bl_pf(1)-res%dx>0 .and. bl_pf(1)-res%dx<bl_dim(1)) bl_pf(1)=res%dx
+            bl_pi(1)=bl_pi(1)+bl_dim(1)
+            deallocate(temp_pset)
+        end do
+        bl_pf(2)=bl_pf(2)+bl_dim(2)
+        if (bl_pf(2)-res%dy>0 .and. bl_pf(2)-res%dy<bl_dim(2)) bl_pf(2)=res%dy
+        bl_pi(2)=bl_pi(2)+bl_dim(2)
+    end do
+    bl_pf(3)=bl_pf(3)+bl_dim(3)
+    if (bl_pf(3)-res%dz>0 .and. bl_pf(3)-res%dz<bl_dim(3)) bl_pf(3)=res%dz
+    bl_pi(3)=bl_pi(3)+bl_dim(3)
+end do
+open (id+2,file=output)
+rewind(id)
+read (id,'(A)') copy
+write (id+2,'(A)') copy(front_trim(copy):len_trim(copy))
+read (id,*)
+write (copy,*) bl_n
+write (id+2,*) copy(front_trim(copy):len_trim(copy))
+status=0
+do
+    read (id,'(A)',iostat=status) copy
+    if (status<0) exit
+    write (id+2,'(A)') copy(front_trim(copy):len_trim(copy))
+end do
+close(id)
+close(id+2)
+call cpu_time(finish)
+timer=finish-start
+end subroutine blocking_dim
+
+! discretiza uma grid em blocos e gera output para BGeost
+! recebe o numero de blocos pretendidos
+subroutine blocking_num(bl_num,bl_e,res,id,output,bl_d,timer)
+real,intent(in)::bl_e
+integer,intent(in)::bl_num,id
+type(grid),intent(in)::res
+character(len=256),intent(in)::output
+integer,intent(out),dimension(3)::bl_d
+integer::lyr,i_x,i_y,i_z,bl_pi(3),bl_pf(3)
+character(len=4)::format,n_b
+real,intent(out)::timer
+real::start,finish,bl_m
+call cpu_time(start)
+open (id,file=output)
+write (id,*) trim(output)//"_blocks"
+write (id,*) bl_num
+
+bl_d=0 !temp
+
+close(id)
+call cpu_time(finish)
+timer=finish-start
+end subroutine blocking_num
+
+! transforma um ficheiro tipo BGeost em point set
+subroutine bgeost_ps(id,input,output,timer)
+integer,intent(in)::id
+character(len=*),intent(in)::input,output
+integer::j,nb,st,pt,bl,pts
+character(len=128)::temp
+character(len=1)::b
+character(len=32)::x,y,z,val,n
+real,intent(out)::timer
+real::start,finish
+call cpu_time(start)
+open (id,file=input,action='read')
+open (id+3,file=output,action='write')
+read (id,*)
+read (id,*) nb
+write (id+3,*) "block_to_pointset"
+write (id+3,*) 6
+write (id+3,*) "x"
+write (id+3,*) "y"
+write (id+3,*) "z"
+write (id+3,*) "block"
+write (id+3,*) "average"
+write (id+3,*) "noise"
+pt=1
+bl=0
+do
+    b=' '
+    do while (b==' ')
+        read(id,'(A)',iostat=st,advance="no") b
+        if (st<0) then
+            if (nb.ne.bl) then
+                print *,"aviso: numero de blocos inconsistente",bl," blocos encontrados"
+            !else
+            !    print *,"ok"
+            end if
+            close(id)
+			close(id+3)
+			call cpu_time(finish)
+			timer=finish-start
+            return
+        end if
+    end do
+    if (iachar(b)>57 .or. iachar(b)<44) then
+        bl=bl+1
+        pt=0
+        read (id,*)
+        read (id,*) val
+        read (id,*) n
+    else
+        backspace(id)
+        read (id,*) x,y,z
+        write (id+3,*) trim(x)," ",trim(y)," ",trim(z)," ",bl," ",trim(val)," ",trim(n)
+        pt=pt+1
+        pts=pts+pt
+    end if
+end do
+end subroutine bgeost_ps
 
 ! mascara (troca data por m1 e no data por m2)
 subroutine mask(m1,m2,header,res,id,output,timer)
