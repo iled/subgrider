@@ -3,12 +3,12 @@ program subgrider
 ! declaracao de variaveis
 integer::i,op,nvar,fid,batch,nr_sims
 integer,dimension(3)::dg,pa,pb
-character(len=256)::ficheiro,output,pocos,base !tentar len=* com f03 ou flibs
+character(len=256)::ficheiro,output,pocos,base
 character(len=1)::sgems,load,mp_p
 logical::file_exists,mp
 real,allocatable::sims(:,:)
 integer,allocatable::px(:),py(:)
-real::Q3,P1,t,nd
+real::Q3,P1,timer,nd
 ! tipo de dados grid
 type::grid
     integer::dx,dy,dz
@@ -17,7 +17,7 @@ end type grid
 type(grid)::res
 fid=10
 ! input inicial
-print *,"----|| s u b g r i d e r  v0.15 ||----"
+print *,"----|| s u b g r i d e r  v0.16 ||----"
 print *,""
 print *,"carregar o ficheiro anterior? (s/n)"
 read *,load
@@ -55,12 +55,13 @@ else
     stop
 end if
 print *,"a carregar o ficheiro ",trim(ficheiro),"..."
-call abre(ficheiro,nvar,dg,res,fid)
-print *,"ficheiro carregado"
+call abre(ficheiro,nvar,dg,res,fid,timer)
+print *,"ficheiro carregado em ",tempo(timer)
 
 !ciclo principal
 do
 batch=-1
+print *,""
 print *,"escolher uma opcao"
 print *,"1 - obter um poco vertical a partir das coordenadas (x,y)"
 print *,"2 - obter n pocos verticais a partir do ficheiro pocos.dat"
@@ -83,14 +84,15 @@ if (op==1) then
         print *,"erro - nao sei ler isso"
         stop
     end if
-    call novo(sgems,nvar+3,fid,output,batch)
-    call pp(dg,pa(1),pa(2),res,fid,output,sgems,nvar,batch)
-    print *,"operacao concluida"
+    call novo(sgems,nvar+3,fid,output,batch,timer)
+    print *,"a furar o poco..."
+    call pp(dg,pa(1),pa(2),res,fid,output,sgems,nvar,batch,timer)
+    print *,"operacao concluida em ",tempo(timer)
 elseif (op==2) then
     print *,"opcao 2"
     write (pocos,*) "pocos.dat"
     print *,"a ler ficheiro ",trim(pocos),"..."
-    call abre_pocos(pocos,px,py)
+    call abre_pocos(pocos,px,py,timer)
     print *,"output com cabecario SGeMS? (s/n)"
     read *,sgems
     if (sgems=="s" .or. sgems=="S") then
@@ -102,12 +104,13 @@ elseif (op==2) then
         stop
     end if
     batch=0
-	call novo(sgems,nvar+3,fid,output,batch)
+	call novo(sgems,nvar+3,fid,output,batch,timer)
 	k=1
+	print *,"a furar os pocos..."
     do k=1,10
-    	call pp(dg,px(k),py(k),res,fid,output,sgems,nvar,batch)
+    	call pp(dg,px(k),py(k),res,fid,output,sgems,nvar,batch,timer)
     end do
-    print *,"operacao concluida"
+    print *,"operacao concluida em ",tempo(timer)
     batch=-1
 elseif (op==3) then
     print *,"opcao 3"
@@ -127,24 +130,26 @@ elseif (op==3) then
         print *,"erro - nao sei ler isso"
         stop
     end if
-    call novo(sgems,nvar,fid,output,batch)
-    call subgrid(pa,pb,res,fid,output,sgems,nvar)
-    print *,"operacao concluida"
+    call novo(sgems,nvar,fid,output,batch,timer)
+    print *,"a criar a subgrid..."
+    call subgrid(pa,pb,res,fid,output,sgems,nvar,timer)
+    print *,"operacao concluida em ",tempo(timer)
 elseif (op==4) then
 	print *,"opcao 4"
 	print *,"inserir valor de no data"
 	read *,nd
-	call novo(sgems,nvar,fid,output,batch)
+	call novo(sgems,nvar,fid,output,batch,timer)
 	print *,"a criar mascara..."
-	call mask(dg,1,0,nd,sgems,nvar,res,fid,output)
-	print *,"operacao concluida"
+	call mask(dg,1,0,nd,sgems,nvar,res,fid,output,timer)
+	print *,"operacao concluida em ",tempo(timer)
 elseif (op==5) then
     print *,"opcao 5"
     print *,"numero de simulacoes realizadas (ficheiros *_simX.OUT)"
     read *,nr_sims
     base=ficheiro(1:len_trim(ficheiro)-4)//'_sim'
     print *,"a carregar grids simuladas..."
-    call abre_sims(nr_sims,sims,dg,base,'.OUT',nvar)
+    call abre_sims(nr_sims,sims,dg,base,'.OUT',nvar,timer)
+    print *,nr_sims,"grids carregadas em ",tempo(timer)
     print *,"produzir grid com mapa de probabilidades? (s/n)"
     read *,mp_p
     if (mp_p=="s" .or. mp_p=="S") then
@@ -155,12 +160,12 @@ elseif (op==5) then
         print *,"erro - input invalido."
         stop
     end if
-    if (mp) call novo(sgems,nvar,fid,output,batch)
+    if (mp) call novo(sgems,nvar,fid,output,batch,timer)
     print *,"a calcular probabilidades..."
     Q3=28.0
-    call likely(res,sims,Q3,P1,mp,fid,output,sgems)
+    call likely(res,sims,Q3,P1,mp,fid,output,sgems,timer)
     print *,P1
-    print *,"operacao concluida."
+    print *,"operacao concluida em ",tempo(timer)
 elseif (op==0) then
     print *,"programa terminado"
     stop
@@ -171,14 +176,43 @@ end do
 
 contains
 
+! devolve o tempo, em string, gasto pela ultima subrotina executada
+function tempo(timer) result(time)
+real,intent(in)::timer
+real::te
+!character(10),allocatable,dimension(:)::time
+character(32)::time
+character(len=6)::format,uni
+if (timer<1) then
+    te=timer*1000
+    format="(f7.3)"
+    uni=" ms"
+elseif (timer>=1 .and. timer<60) then
+    te=timer
+    format="(f6.3)"
+    uni=" s"
+elseif (timer>=60 .and. timer<3600) then
+    te=timer/60
+    format="(f6.3)"
+    uni=" min"
+else
+    te=timer/3600
+    format="(f7.3)"
+    uni=" h"
+end if
+write (time,format) te
+time=time(1:len_trim(time))//trim(uni)
+end function tempo
+
 ! carrega o ficheiro de dados para um vector
-subroutine abre(ficheiro,nvar,dg,grida,id)
-character(len=256), intent(in) :: ficheiro !tentar len=* com f03 ou flibs
+subroutine abre(ficheiro,nvar,dg,grida,id,timer)
+character(len=256), intent(in) :: ficheiro
 integer, intent(in) :: dg(3),id
 integer, intent(inout) :: nvar
 type(grid),intent(out)::grida
-real::start,finish ! timer
-call cpu_time(start) ! timer
+real,intent(out)::timer
+real::start,finish
+call cpu_time(start)
 grida%dx=dg(1)
 grida%dy=dg(2)
 grida%dz=dg(3)
@@ -195,18 +229,19 @@ do i=1,size(grida%val)
     read(id,*) grida%val(i)
 end do
 close(id)
-call cpu_time(finish) ! timer
-print '("tempo = ",f6.3," segundos.")',finish-start ! timer
+call cpu_time(finish)
+timer=finish-start
 end subroutine abre
 
 ! carrega o ficheiro com as coordenadas dos pocos
-subroutine abre_pocos(pocos,px,py)
+subroutine abre_pocos(pocos,px,py,timer)
 character(len=256),intent(in)::pocos
 integer,allocatable,intent(out)::px(:),py(:)
 integer::n,i
 logical::file_exists
-real::start,finish ! timer
-call cpu_time(start) ! timer
+real,intent(out)::timer
+real::start,finish
+call cpu_time(start)
 inquire (file=pocos,exist=file_exists)
 if (file_exists) then
     open (19,file=pocos,action='read')
@@ -221,12 +256,12 @@ else
     print *,"ficheiro ",trim(pocos)," nao encontrado."
     stop
 end if
-call cpu_time(finish) ! timer
-print '("tempo = ",f6.3," segundos.")',finish-start ! timer
+call cpu_time(finish)
+timer=finish-start
 end subroutine abre_pocos
 
 ! carrega ficheiros de simulacoes para uma matriz
-subroutine abre_sims(nr_sims,sims,dg,base,ext,nvar)
+subroutine abre_sims(nr_sims,sims,dg,base,ext,nvar,timer)
 integer,intent(in)::nr_sims,dg(3)
 integer,intent(inout)::nvar
 real,allocatable,intent(out)::sims(:,:)
@@ -237,19 +272,20 @@ character(len=4)::simN,format
 type(grid)::gridsim
 logical::file_exists
 integer::i,id
-real::start,finish ! timer
-call cpu_time(start) ! timer
+real,intent(out)::timer
+real::start,finish,t
+call cpu_time(start)
 allocate(sims(nr_sims,product(dg)))
 id=20
 do i=1,nr_sims
     if (i<10) format="(I1)"
-    if (i>10 .and. i<100) format="(I2)"
-    if (i>100 .and. i<1000) format="(I3)"
+    if (i>=10 .and. i<100) format="(I2)"
+    if (i>=100 .and. i<1000) format="(I3)"
     write (simN,format) i
     sim=trim(base)//trim(simN)//trim(ext)
     inquire (file=sim,exist=file_exists)
     if (file_exists) then
-        call abre(sim,nvar,dg,gridsim,id)
+        call abre(sim,nvar,dg,gridsim,id,t)
         sims(i,:)=gridsim%val
         id=id+1
     else
@@ -257,17 +293,20 @@ do i=1,nr_sims
         stop
     end if
 end do
-call cpu_time(finish) ! timer
-print '("tempo = ",f6.3," segundos.")',finish-start ! timer
+call cpu_time(finish)
+timer=finish-start
 end subroutine abre_sims
 
 ! cria um novo ficheiro de texto com cabecario sgems (ou nao)
-subroutine novo(sgems,nvar,id,newfile,batch)
+subroutine novo(sgems,nvar,id,newfile,batch,timer)
 character(len=1),intent(in)::sgems
 integer,intent(in)::nvar,batch
 integer,intent(inout)::id
-character(len=256),intent(out)::newfile !tentar len=* com f03 ou flibs
-character(len=50)::nv,novonome  !tentar len=* com f03 ou flibs
+character(len=256),intent(out)::newfile
+character(len=50)::nv,novonome
+real,intent(out)::timer
+real::start,finish
+call cpu_time(start)
 id=id+1
 if (batch>=0) then
 	newfile=ficheiro(1:len_trim(ficheiro)-4)//'_wells.prn'
@@ -298,19 +337,21 @@ if (sgems=="s") then
 	end if
 end if
 close(id)
+call cpu_time(finish)
+timer=finish-start
 end subroutine novo
 
 ! papa um poco a partir de uma grid e devolve um point set
-subroutine pp(dg,xp,yp,res,id,output,sgems,nvar,batch)
+subroutine pp(dg,xp,yp,res,id,output,sgems,nvar,batch,timer)
 integer,intent(in)::dg(3),xp,yp,id,nvar
 integer,intent(inout)::batch
 type(grid),intent(in)::res
-character(len=256),intent(in)::output !tentar len=* com f03 ou flibs
+character(len=256),intent(in)::output
 character(len=1),intent(in)::sgems
-real::start,finish ! timer
+real::start,finish
+real,intent(out)::timer
 integer::z,p,m
-print *,"a furar o poco..."
-call cpu_time(start) ! timer
+call cpu_time(start)
 open (id,file=output)
 if (sgems=="s") then
     do i=1,nvar+5
@@ -328,21 +369,21 @@ do z=1,dg(3)
 	write(id,*) xp,yp,z,res%val(p)
 end do
 close(id)
-call cpu_time(finish) ! timer
-print '("tempo = ",f6.3," segundos.")',finish-start ! timer
+call cpu_time(finish)
+timer=finish-start
 end subroutine pp
 
 ! cria uma grid a partir de outra existente
-subroutine subgrid(pa,pb,res,id,output,sgems,nvar)
+subroutine subgrid(pa,pb,res,id,output,sgems,nvar,timer)
 integer,dimension(3),intent(in)::pa,pb
 integer,intent(in)::id,nvar
 type(grid),intent(in)::res
-character(len=256),intent(in)::output !tentar len=* com f03 ou flibs
+character(len=256),intent(in)::output
 character(len=1),intent(in)::sgems
 integer::pi,pf,d,p(3),j,c,v
+real,intent(out)::timer
 real::start,finish
-print *,"a criar a subgrid..."
-call cpu_time(start) ! timer
+call cpu_time(start)
 open (id,file=output)
 if (sgems=="s") then
     do i=1,nvar+2
@@ -364,22 +405,23 @@ do while (j<pb(3))
     end do
     j=j+1
 end do
-call cpu_time(finish) ! timer
-print '("tempo = ",f6.3," segundos.")',finish-start ! timer
 close(id)
+call cpu_time(finish)
+timer=finish-start
 end subroutine subgrid
 
 ! mascara (troca data por m1 e no data por m2)
-subroutine mask(dg,m1,m2,nd,sgems,nvar,res,id,output)
+subroutine mask(dg,m1,m2,nd,sgems,nvar,res,id,output,timer)
 integer,dimension(3),intent(in)::dg
 integer,intent(in)::id,nvar,m1,m2
 type(grid),intent(in)::res
 real,intent(in)::nd
-character(len=256),intent(in)::output !tentar len=* com f03 ou flibs
+character(len=256),intent(in)::output
 character(len=1),intent(in)::sgems
 integer::j,i
-real::start,finish !timer
-call cpu_time(start) ! timer
+real,intent(out)::timer
+real::start,finish
+call cpu_time(start)
 open (id,file=output)
 if (sgems=="s") then
     do i=1,nvar+2
@@ -395,30 +437,30 @@ do while (j<=product(dg))
 	end if
 	j=j+1
 end do
-call cpu_time(finish) ! timer
-print '("tempo = ",f6.3," segundos.")',finish-start ! timer
 close(id)
+call cpu_time(finish)
+timer=finish-start
 end subroutine mask
 
 ! calcula a verosimilhanca entre a grid inicial e as simuladas
-subroutine likely(res,sims,k,p,mp,id,output,sgems)
+subroutine likely(res,sims,k,p,mp,id,output,sgems,timer)
 type(grid),intent(in)::res
 real,dimension(:,:),intent(in)::sims
 real,intent(in)::k
-real,intent(out)::p
+real,intent(out)::p,timer
 integer,intent(in)::id
 logical,intent(in)::mp
 character(len=256),intent(in)::output
 character(len=1),intent(in)::sgems
 integer::j,l,a,b
-real::start,finish,t ! timer
-call cpu_time(start) ! timer
+real::start,finish
+call cpu_time(start)
 if (mp) open(id,file=output)
 a=0
 p=0
 ! open(33,file='likely.dbg',action='write') ! dd
 ! write (33,*) size(res%val), size(sims,1) ! dd
-if (sgems=="s") then
+if (sgems=="s" .and. mp) then
     do i=1,nvar+2
         read (id,*)
     end do
@@ -440,8 +482,8 @@ do j=1,size(res%val)
 end do
 p=p/(size(sims,1)*a)
 if (mp) close(id)
-call cpu_time(finish) ! timer
-t=finish-start
+call cpu_time(finish)
+timer=finish-start
 end subroutine likely
 
 end program
