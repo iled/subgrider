@@ -1,3 +1,6 @@
+! subgrider :: Julio Caineta, 2010
+! sg_gridutils:: modulo de dependencias para manipulacao de grids (sg_griders)
+
 module sg_gridutils
 
 use qsort_c_module
@@ -61,7 +64,8 @@ end function
 function variancia(data) result(var)
 real,intent(in),dimension(:)::data
 real::var
-var=media(data**2)-media(data)**2
+var=sum((data-media(data))**2)/size(data)
+!var=media(data**2)-media(data)**2
 end function variancia
 
 ! calcula o percentil p de uma grid

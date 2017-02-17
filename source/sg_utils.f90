@@ -1,3 +1,6 @@
+! subgrider :: Julio Caineta, 2010
+! sg_utils :: modulo de dependencias do interface (sg_main)
+
 module sg_utils
 
 use sg_griders
@@ -99,7 +102,7 @@ end subroutine novo
 
 ! carrega ficheiros de simulacoes para uma matriz
 subroutine abre_sims(nr_sims,sims,dg,base,ext,header,timer)
-integer,intent(in)::nr_sims,dg(3)
+integer,intent(in)::nr_sims(2),dg(3)
 logical,intent(in)::header
 real,allocatable,intent(out)::sims(:,:)
 character(len=256),intent(in)::base
@@ -111,9 +114,9 @@ integer::i,id
 real,intent(out)::timer
 real::start,finish,t
 call cpu_time(start)
-allocate(sims(nr_sims,product(dg)))
+allocate(sims(nr_sims(2)-nr_sims(1)+1,product(dg)))
 id=20
-do i=1,nr_sims
+do i=nr_sims(1),nr_sims(2)
     if (i<10) format="(I1)"
     if (i>=10 .and. i<100) format="(I2)"
     if (i>=100 .and. i<1000) format="(I3)"
@@ -127,5 +130,33 @@ end do
 call cpu_time(finish)
 timer=finish-start
 end subroutine abre_sims
+
+! devolve o tempo, em string, gasto pela ultima subrotina executada
+function tempo(timer) result(time)
+real,intent(in)::timer
+real::te
+!character(10),allocatable,dimension(:)::time
+character(32)::time
+character(len=6)::format,uni
+if (timer<1) then
+    te=timer*1000
+    format="(f7.3)"
+    uni=" ms"
+elseif (timer>=1 .and. timer<60) then
+    te=timer
+    format="(f6.3)"
+    uni=" s"
+elseif (timer>=60 .and. timer<3600) then
+    te=timer/60
+    format="(f6.3)"
+    uni=" min"
+else
+    te=timer/3600
+    format="(f7.3)"
+    uni=" h"
+end if
+write (time,format) te
+time=time(1:len_trim(time))//trim(uni)
+end function tempo
 
 end module

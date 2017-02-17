@@ -1,9 +1,12 @@
+! subgrider :: Julio Caineta, 2010
+! sg_griders :: modulo de manipulacao de grids
+
 module sg_griders
 
 use sg_gridutils
 implicit none
 
-public::abre,bender,likely,mask,pp,subgrid
+public::abre,bender,likely,mask,pp,subgrid,simmedvar
 
 contains
 
@@ -131,15 +134,16 @@ real,intent(out)::timer
 integer,intent(in)::id
 logical,intent(in)::mp,header
 character(len=256),intent(in)::output
-integer::j,l,a
-real::start,finish,b
+integer::j,l,a,pp,b
+real::start,finish
 call cpu_time(start)
 if (mp) then
     open(id,file=output)
     if (header) call header_skip(id)
 end if
 a=0
-p=0
+p=0.0
+pp=0
 ! open(33,file='likely.dbg',action='write') ! dd
 ! write (33,*) size(res%val), size(sims,1) ! dd
 do j=1,size(res%val)
@@ -147,19 +151,18 @@ do j=1,size(res%val)
         a=a+1
         if (mp) b=0
         do l=1,size(sims,1)
-            if (sims(l,j)>=k(1).and.sims(l,j)<k(2)) then
-                p=p+1
+            if (sims(l,j)>=k(1) .and. sims(l,j)<k(2)) then
+                pp=pp+1
+!               write (33,*) j, res%val(j), sims(l,j)
                 if (mp) b=b+1
             end if
-!            write (33,*) p,b ! dd
         end do
-        if (mp) write (id,*) b/size(sims,1)
+        if (mp) write (id,*) b/real(size(sims,1))
     else
         if (mp) write (id,*) res%nd
     end if
-!    write (33,*) j,a ! dd
 end do
-p=p/(size(sims,1)*a)
+p=pp/real((size(sims,1)*a))
 if (mp) close(id)
 call cpu_time(finish)
 timer=finish-start
@@ -206,5 +209,30 @@ close(id)
 call cpu_time(finish)
 timer=finish-start
 end subroutine bender
+
+subroutine simmedvar(do_med,do_var,sims,id,output,header,timer)
+real,dimension(:,:),intent(in)::sims
+integer,intent(in)::id
+character(len=256),intent(in)::output
+logical,intent(in)::header,do_med,do_var
+real,intent(out)::timer
+integer::i,j
+real::start,finish
+!real,dimension(:),allocatable::med,var
+call cpu_time(start)
+!if (do_med) allocate(med(size(sims,2)))
+!if (do_var) allocate(var(size(sims,2)))
+open (id,file=output)
+if (header) call header_skip(id)
+do j=1,size(sims,2)
+!    if (do_med) med(j)=media(sims(:,j))
+!    if (do_var) var(j)=variancia(sims(:,j))
+    if (do_med .and. .not.do_var) write(id,*) media(sims(:,j))
+    if (.not.do_med .and. do_var) write(id,*) variancia(sims(:,j))
+    if (do_med .and. do_var) write(id,*) media(sims(:,j)),variancia(sims(:,j))
+end do
+call cpu_time(finish)
+timer=finish-start
+end subroutine simmedvar
 
 end module
