@@ -7,7 +7,7 @@ use sg_griders
 use sg_gridutils
 implicit none
 
-public::abre_pocos,abre_sims,header_ask,novo
+public::abre_pocos,abre_sims,header_ask,novo,rand_int,rand_well,tempo
 
 contains
 
@@ -66,13 +66,13 @@ real::start,finish
 integer::i
 call cpu_time(start)
 id=id+1
-if (batch>=0) then
-    newfile='wells.prn'
+!if (batch>=0) then
+!    newfile='wells.prn'
     !newfile=ficheiro(1:len_trim(ficheiro)-4)//'_wells.prn'
-else
+!else
     print *,"nome do ficheiro"
     read *,newfile
-end if
+!end if
 open (id,file=newfile,action='write')
 if (header) then
     if (batch>=0) then
@@ -158,5 +158,64 @@ end if
 write (time,format) te
 time=time(1:len_trim(time))//trim(uni)
 end function tempo
+
+subroutine rand_int(a,b,ri)
+integer,intent(in)::a,b
+integer,intent(out)::ri
+real::colheita
+call random_number(colheita)
+if (b<a) then
+    ri=int(b+(a-b)*colheita+0.5)
+else
+    ri=int(a+(b-a)*colheita+0.5)
+end if
+end subroutine rand_int
+
+subroutine rand_well(k,dg,px,py,wells,timer)
+integer,intent(in)::k,dg(3)
+integer,dimension(:),intent(in)::px,py
+integer,allocatable,dimension(:,:,:),intent(out)::wells
+real,intent(out)::timer
+integer::fixo(2),i,j,maxp(2),minp(2),xx(2),yy(2),limx(2),limy(2),muv(2)
+integer,allocatable,dimension(:,:)::difs
+real::start,finish
+call cpu_time(start)
+! fixar um poco(x,y)
+fixo(1)=px(1)
+fixo(2)=py(1)
+! diferencas(x,y) entre o fixo e todos
+allocate(difs(size(px),2))
+do i=1,size(px)
+    difs(i,1)=fixo(1)-px(i)
+    difs(i,2)=fixo(2)-py(i)
+end do
+! max(x,y) e min(x,y) entre todos
+maxp(1)=maxval(px)
+maxp(2)=maxval(py)
+minp(1)=minval(px)
+minp(2)=minval(py)
+! quanto pode andar em x(direita,esquerda) e em y(cima,baixo)
+xx(1)=dg(1)-maxp(1)
+xx(2)=minp(1)-1
+yy(1)=dg(2)-maxp(2)
+yy(2)=minp(2)-1
+! intervalo para gerar numeros aleatorios em x(min,max) e em y(min,max)
+limx(1)=fixo(1)-xx(2)
+limx(2)=fixo(1)+xx(1)
+limy(1)=fixo(2)-yy(2)
+limy(2)=fixo(2)+yy(1)
+! gerar numeros aleatorios(x,y) e novas posicoes(x,y,k)
+allocate(wells(size(px),2,k))
+do i=1,k
+    call rand_int(limx(1),limx(2),muv(1))
+    call rand_int(limy(1),limy(2),muv(2))
+    do j=1,size(px)
+        wells(j,1,i)=muv(1)-difs(j,1)
+        wells(j,2,i)=muv(2)-difs(j,2)
+    end do
+end do
+call cpu_time(finish)
+timer=finish-start
+end subroutine rand_well
 
 end module

@@ -3,7 +3,7 @@
 
 module sg_gridutils
 
-use qsort_c_module
+use qsort_c
 implicit none
 
 public::checkfile,del_sorted_nd,header_skip,itochar,media,percentil,percentil_sims,percentil_updt,rtochar,variancia

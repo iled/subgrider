@@ -6,7 +6,7 @@ module sg_griders
 use sg_gridutils
 implicit none
 
-public::abre,bender,likely,mask,pp,subgrid,simmedvar
+public::abre,bender,likely,mask,pp,subgrid,simmedvar,unbender
 
 contains
 
@@ -209,6 +209,49 @@ close(id)
 call cpu_time(finish)
 timer=finish-start
 end subroutine bender
+
+subroutine unbender(x,y,z,nd,id,output,header,hor,res,timer)
+integer::yc,xc,zc,k
+integer,intent(in)::x,y,z,id
+real,intent(in)::nd
+type(grid),intent(in)::res
+type(grid),intent(in)::hor
+real,intent(out)::timer
+character(len=256),intent(in)::output
+logical,intent(in)::header
+real::start,finish
+real,allocatable,dimension(:)::un
+integer::h,maxi
+call cpu_time(start)
+allocate(un(x*y*(z+int(maxval(hor%val)))))
+yc=0
+un(:)=nd
+do while(yc<y)
+    xc=0
+    do while(xc<x)
+        zc=0
+        do while(zc<z)
+            h=hor%val(x*yc+xc+1) !tentar com nint(real)
+            un(x*y*(zc+h)+x*yc+xc+1)=res%val(1+x*y*(h+zc)+x*yc+xc)
+            zc=zc+1
+        end do
+        xc=xc+1
+    end do
+    yc=yc+1
+end do
+k=0
+print *,""
+open (id,file=output,action='write')
+if (header) call header_skip(id)
+maxi=z+maxval(hor%val)
+do while(k<x*y*maxi)
+    write (id,*) un(k+1)
+    k=k+1
+end do
+close(id)
+call cpu_time(finish)
+timer=finish-start
+end subroutine unbender
 
 subroutine simmedvar(do_med,do_var,sims,id,output,header,timer)
 real,dimension(:,:),intent(in)::sims

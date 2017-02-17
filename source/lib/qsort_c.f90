@@ -6,7 +6,7 @@
 
 ! Made F conformant by Walt Brainerd
 
-module qsort_c_module
+module qsort_c
 
 public :: QsortC
 private :: Partition
@@ -61,4 +61,4 @@ subroutine Partition(A, marker)
 
 end subroutine Partition
 
-end module qsort_c_module
+end module qsort_c
