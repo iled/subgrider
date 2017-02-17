@@ -1,8 +1,9 @@
 program subgrider
 
 ! declaracao de variaveis
-integer::i,op,nvar,fid
+integer::i,op,nvar,fid,multi
 integer,dimension(3)::dg,pa,pb
+integer,dimension(10)::px,py
 character(len=256)::ficheiro,output !tentar len=* com f03 ou flibs
 character(len=1)::sgems,load
 logical::file_exists
@@ -14,7 +15,7 @@ end type grid
 type(grid)::res
 fid=10
 ! input inicial
-print *,"----|| s u b g r i d e r  v0.11 ||----"
+print *,"----|| s u b g r i d e r  v0.121 ||----"
 print *,""
 print *,"carregar o ficheiro anterior? (s/n)"
 read *,load
@@ -57,9 +58,11 @@ print *,"ficheiro carregado"
 
 !ciclo principal
 do
+multi=-1
 print *,"escolher uma opcao"
 print *,"1 - obter um poco vertical a partir das coordenadas (x,y)"
 print *,"2 - obter outra grid a partir de um cubo ou paralelipipedo"
+print *,"3 - em teste: 10 pocos no pocos.cfg"
 print *,"0 - sair"
 read *,op
 if (op==1) then
@@ -76,8 +79,8 @@ if (op==1) then
         print *,"erro - nao sei ler isso"
         stop
     end if
-    call novo(sgems,nvar+3,fid,output)
-    call pp(dg,pa(1),pa(2),res,fid,output,sgems,nvar)
+    call novo(sgems,nvar+3,fid,output,multi)
+    call pp(dg,pa(1),pa(2),res,fid,output,sgems,nvar,multi)
     print *,"operacao concluida"
 elseif (op==2) then
     print *,"opcao 2"
@@ -97,9 +100,43 @@ elseif (op==2) then
         print *,"erro - nao sei ler isso"
         stop
     end if
-    call novo(sgems,nvar,fid,output)
+    call novo(sgems,nvar,fid,output,multi)
     call subgrid(pa,pb,res,fid,output,sgems,nvar)
     print *,"operacao concluida"
+elseif (op==3) then
+    print *,"opcao 3"
+    print *,"a ler ficheiro pocos.cfg..."
+    inquire(file='pocos.cfg',exist=file_exists)
+    if (file_exists) then
+	    open (19,file='pocos.cfg',action='read')
+	    do i=1,10
+	    	read (19,*) px(i),py(i)
+    	end do
+    	close(19)
+    	print *,"coordenadas dos pocos carregadas."
+    else
+        print *,"ficheiro pocos.cfg nao encontrado."
+        stop
+    end if
+    print *,"output com cabecario SGeMS? (s/n)"
+    read *,sgems
+    if (sgems=="s" .or. sgems=="S") then
+        sgems="s"
+    elseif (sgems=="n" .or. sgems=="N") then
+        sgems="n"
+    else
+        print *,"erro - nao sei ler isso"
+        stop
+    end if
+    multi=0
+	call novo(sgems,nvar+3,fid,output,multi)
+	k=1
+    do k=1,10
+    	call pp(dg,px(k),py(k),res,fid,output,sgems,nvar,multi)
+    	print *,k
+    end do
+    print *,"operacao concluida"
+    multi=-1
 elseif (op==0) then
     print *,"programa terminado"
     stop
@@ -139,38 +176,53 @@ print '("tempo = ",f6.3," segundos.")',finish-start ! timer
 end subroutine abre
 
 ! cria um novo ficheiro de texto com cabecario sgems (ou nao)
-subroutine novo(sgems,nvar,id,newfile)
+subroutine novo(sgems,nvar,id,newfile,multi)
 character(len=1),intent(in)::sgems
-integer,intent(in)::nvar
+integer,intent(in)::nvar,multi
 integer,intent(inout)::id
 character(len=256),intent(out)::newfile !tentar len=* com f03 ou flibs
 character(len=50)::nv,novonome  !tentar len=* com f03 ou flibs
 id=id+1
-print *,"nome do ficheiro"
-read *,newfile
+if (multi>=0) then
+	newfile=ficheiro(1:len_trim(ficheiro)-4)//'_wells.prn'
+else
+	print *,"nome do ficheiro"
+	read *,newfile
+end if
 open (id,file=newfile,action='write')
 if (sgems=="s") then
-    print *,"nome do conjunto de dados"
-    read *,novonome
-    write(id,*) novonome
-    write (id,*) nvar
-    print *,"nomes das variaveis (espacados com enter)"
-    do i=1,nvar
-        read *,nv
-        write (id,*) nv
-    end do
+	if (multi>=0) then
+		novonome=newfile(1:len_trim(newfile)-4)
+    	write(id,*) novonome
+    	write (id,*) nvar
+    	nv='var'
+    	do i=1,nvar
+        	write (id,*) nv
+    	end do
+	else
+	    print *,"nome do conjunto de dados"
+    	read *,novonome
+    	write(id,*) novonome
+    	write (id,*) nvar
+    	print *,"nomes das variaveis (espacados com enter)"
+    	do i=1,nvar
+        	read *,nv
+        	write (id,*) nv
+    	end do
+	end if
 end if
 close(id)
 end subroutine novo
 
 ! papa um poco a partir de uma grid e devolve um point set
-subroutine pp(dg,xp,yp,res,id,output,sgems,nvar)
+subroutine pp(dg,xp,yp,res,id,output,sgems,nvar,multi)
 integer,intent(in)::dg(3),xp,yp,id,nvar
+integer,intent(inout)::multi
 type(grid),intent(in)::res
 character(len=256),intent(in)::output !tentar len=* com f03 ou flibs
 character(len=1),intent(in)::sgems
 real::start,finish ! timer
-integer::z,p
+integer::z,p,m
 print *,"a furar o poco..."
 call cpu_time(start) ! timer
 open (id,file=output)
@@ -178,6 +230,13 @@ if (sgems=="s") then
     do i=1,nvar+5
         read (id,*)
     end do
+end if
+print *,multi
+if (multi>=0) then
+	do m=1,multi
+		read (id,*)
+	end do
+	multi=multi+93
 end if
 do z=1,dg(3)
 	p=xp+dg(1)*(yp-1)+dg(1)*dg(2)*(z-1)
