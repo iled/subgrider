@@ -15,7 +15,7 @@ end type grid
 type(grid)::res
 fid=10
 ! input inicial
-print *,"----|| s u b g r i d e r  v0.121 ||----"
+print *,"----|| s u b g r i d e r  v0.13 ||----"
 print *,""
 print *,"carregar o ficheiro anterior? (s/n)"
 read *,load
@@ -52,7 +52,7 @@ else
     print *,"erro - nao sei ler isso"
     stop
 end if
-print *,"a carregar o ficheiro..."
+print *,"a carregar o ficheiro ",trim(ficheiro),"..."
 call abre(ficheiro,nvar,dg,res,fid)
 print *,"ficheiro carregado"
 
@@ -63,6 +63,7 @@ print *,"escolher uma opcao"
 print *,"1 - obter um poco vertical a partir das coordenadas (x,y)"
 print *,"2 - obter outra grid a partir de um cubo ou paralelipipedo"
 print *,"3 - em teste: 10 pocos no pocos.cfg"
+print *,"4 - criar uma mascara (data=1, no data=0)"
 print *,"0 - sair"
 read *,op
 if (op==1) then
@@ -137,6 +138,12 @@ elseif (op==3) then
     end do
     print *,"operacao concluida"
     multi=-1
+elseif (op==4) then
+	print *,"opcao 4"
+	call novo(sgems,nvar,fid,output,multi)
+	print *,"a criar mascara..."
+	call mask(dg,1.0,0.0,-999.0,sgems,nvar,res,fid,output)
+	print *,"operacao concluida"
 elseif (op==0) then
     print *,"programa terminado"
     stop
@@ -283,5 +290,36 @@ call cpu_time(finish) ! timer
 print '("tempo = ",f6.3," segundos.")',finish-start ! timer
 close(id)
 end subroutine subgrid
+
+! mascara (troca dados por m1 e no data por m2)
+subroutine mask(dg,m1,m2,nd,sgems,nvar,res,id,output)
+integer,dimension(3),intent(in)::dg
+integer,intent(in)::id,nvar
+type(grid),intent(in)::res
+real,intent(in)::m1,m2,nd
+character(len=256),intent(in)::output !tentar len=* com f03 ou flibs
+character(len=1),intent(in)::sgems
+integer::j,i
+real::start,finish
+call cpu_time(start) ! timer
+open (id,file=output)
+if (sgems=="s") then
+    do i=1,nvar+2
+        read (id,*)
+    end do
+end if
+j=1
+do while (j<=product(dg))
+	if (res%val(j)/=nd) then
+		write (id,"(I1)") 1
+	else
+		write (id,"(I1)") 0
+	end if
+	j=j+1
+end do
+call cpu_time(finish) ! timer
+print '("tempo = ",f6.3," segundos.")',finish-start ! timer
+close(id)
+end subroutine mask
 
 end program
