@@ -1,9 +1,9 @@
 program subgrider
 
 ! declaracao de variaveis
-integer::i,op,nvar,fid,batch,nr_sims
-integer,dimension(3)::dg,pa,pb
-character(len=256)::ficheiro,output,pocos,base
+integer::i,op,nvar,fid,batch,nr_sims,zef
+integer,dimension(3)::dg,pa,pb,dg_2d
+character(len=256)::ficheiro,output,pocos,base,mp_bend
 character(len=1)::sgems,load,mp_p
 logical::file_exists,mp
 real,allocatable::sims(:,:)
@@ -14,10 +14,10 @@ type::grid
     integer::dx,dy,dz
     real,allocatable::val(:)
 end type grid
-type(grid)::res
+type(grid)::res,hor
 fid=10
 ! input inicial
-print *,"----|| s u b g r i d e r  v0.16 ||----"
+print *,"----|| s u b g r i d e r  v0.16_bender.2 ||----"
 print *,""
 print *,"carregar o ficheiro anterior? (s/n)"
 read *,load
@@ -68,6 +68,7 @@ print *,"2 - obter n pocos verticais a partir do ficheiro pocos.dat"
 print *,"3 - obter uma grid a partir um volume (cubo, paralelipipedo) da grid inicial"
 print *,"4 - criar uma mascara (data=1, no data=0)"
 print *,"5 - calcular verosimilhanca"
+print *,"6 - bender"
 print *,"0 - sair"
 read *,op
 if (op==1) then
@@ -78,8 +79,10 @@ if (op==1) then
     read *,sgems
     if (sgems=="s" .or. sgems=="S") then
         sgems="s"
+        nvar=1
     elseif (sgems=="n" .or. sgems=="N") then
         sgems="n"
+        nvar=0
     else
         print *,"erro - nao sei ler isso"
         stop
@@ -97,8 +100,10 @@ elseif (op==2) then
     read *,sgems
     if (sgems=="s" .or. sgems=="S") then
         sgems="s"
+        nvar=1
     elseif (sgems=="n" .or. sgems=="N") then
         sgems="n"
+        nvar=0
     else
         print *,"erro - nao sei ler isso"
         stop
@@ -124,8 +129,10 @@ elseif (op==3) then
     read *,sgems
     if (sgems=="s" .or. sgems=="S") then
         sgems="s"
+        nvar=1
     elseif (sgems=="n" .or. sgems=="N") then
         sgems="n"
+        nvar=0
     else
         print *,"erro - nao sei ler isso"
         stop
@@ -166,6 +173,45 @@ elseif (op==5) then
     call likely(res,sims,Q3,P1,mp,fid,output,sgems,timer)
     print *,P1
     print *,"operacao concluida em ",tempo(timer)
+elseif (op==6) then
+    print *,"opcao 6"
+    print *,"atencao: a grid inicial vai ser alterada"
+    print *,"dimensao maxima em z a escrever"
+    read *,zef
+    print *,"mapa de planificacao a abrir: caminho/nome"
+    read *,mp_bend
+    print *,"ficheiro SGeMS? (s/n)"
+    read *,sgems
+    if (sgems=="s" .or. sgems=="S") then
+        nvar=1
+    elseif (sgems=="n" .or. sgems=="N") then
+        nvar=0
+    else
+        print *,"erro - nao sei ler isso"
+        stop
+    end if
+    print *,"dimensoes do mapa: x y"
+    read (*,*) dg_2d(1),dg_2d(2)
+    dg_2d(3)=1
+    print *,"a ler mapa de planificacao"
+    call abre(mp_bend,nvar,dg_2d,hor,id+20,timer)
+    print *,"mapa lido em ",tempo(timer)
+    print *,"output com cabecario SGeMS? (s/n)"
+    read *,sgems
+    if (sgems=="s" .or. sgems=="S") then
+        sgems="s"
+        nvar=1
+    elseif (sgems=="n" .or. sgems=="N") then
+        sgems="n"
+        nvar=0
+    else
+        print *,"erro - nao sei ler isso"
+        stop
+    end if
+    call novo(sgems,nvar,id,output,batch,timer)
+    print *,"a planificar grid"
+	call bender(dg(1),dg(2),dg(3),-999.25,id,output,zef,hor,res,timer)
+	print *,"operacao concluida em ",tempo(timer)
 elseif (op==0) then
     print *,"programa terminado"
     stop
@@ -304,7 +350,7 @@ integer,intent(in)::nvar,batch
 integer,intent(inout)::id
 character(len=256),intent(out)::newfile
 character(len=50)::nv,novonome
-real,intent(out)::timer
+real,intent(out),optional::timer
 real::start,finish
 call cpu_time(start)
 id=id+1
@@ -485,5 +531,43 @@ if (mp) close(id)
 call cpu_time(finish)
 timer=finish-start
 end subroutine likely
+
+subroutine bender(x,y,z,nd,id,output,zef,hor,res,timer)
+integer::yc,xc,zc,k
+integer,intent(in)::x,y,z,zef
+real,intent(in)::nd
+type(grid),intent(inout)::res
+type(grid),intent(in)::hor
+real,optional,intent(out)::timer
+character(len=256),intent(in)::output
+real::start,finish
+call cpu_time(start)
+yc=0
+do while(yc<y)
+    xc=0
+    do while(xc<x)
+        zc=0
+        do while(zc<z)
+            if (hor%val(x*yc+xc+1)-zc>=0) then
+                res%val(x*y*zc+x*yc+xc+1)=res%val(1+x*y*(hor%val(x*yc+xc+1)-zc)+x*yc+xc)
+            else
+                res%val(1+x*y*zc+x*yc+xc)=nd
+            end if
+            zc=zc+1
+        end do
+        xc=xc+1
+    end do
+    yc=yc+1
+end do
+k=0
+open (id,file=output,action='write')
+do while(k<x*y*zef)
+    write (id,*) res%val(k+1)
+    k=k+1
+end do
+close(id)
+call cpu_time(finish)
+timer=finish-start
+end subroutine bender
 
 end program
