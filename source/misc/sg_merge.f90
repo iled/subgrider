@@ -8,7 +8,7 @@ use sg_utils
 
 implicit none
 
-integer::nr_sims,dg(3),i,fid
+integer::nr_sims(2),dg(3),i,fid
 character(len=256)::base,newfile
 real::timer,nd,start,finish
 real,allocatable::sims(:,:)
@@ -16,7 +16,7 @@ logical::header
 !real,allocatable,dimension(:)::merged
 
 fid=10
-print *,"numero de ficheiros"
+print *,"ler de ficheiro numero A a numero B (A,B)"
 read *,nr_sims
 print *,"base"
 read *,base
